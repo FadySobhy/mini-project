@@ -25,14 +25,39 @@ class TransactionService
 
     public function getAll()
     {
-        return Transaction::with(['payer:id,name', 'category:id,name', 'subcategory:id,name'])->paginate(10);
+        $transactions = Transaction::with(['payer:id,name', 'category:id,name', 'subcategory:id,name'])
+            ->paginate(10);
+        $this->setStatusToTransactions($transactions);
+
+        return $transactions;
     }
 
     public function myTransactions()
     {
-        return Transaction::where('payer', auth()->user()->id)
+        $transactions = Transaction::where('payer', auth()->user()->id)
             ->with(['paymentRecords', 'category:id,name', 'subcategory:id,name'])
             ->paginate(10);
+        $this->setStatusToTransactions($transactions);
+
+        return $transactions;
+    }
+
+    private function setStatusToTransactions($transaction) {
+        $transaction->transform(function ($item, $key) {
+            $status     = '';
+            $todayDate  = date('Y-m-d');
+
+            if ($item->remaining_amount == 0)
+                $status = 'paid';
+            elseif ($item->due_on > $todayDate  && $item->remaining_amount > 0)
+                $status = 'outstanding';
+            elseif ($item->due_on <= $todayDate && $item->remaining_amount > 0)
+                $status = 'overdue';
+
+            $item->status = $status;
+
+            return $item;
+        });
     }
 
     public function create(Request $request) {
@@ -44,7 +69,6 @@ class TransactionService
             $transaction = Transaction::create([
                 'amount'            => $totalAmount,
                 'remaining_amount'  => $totalAmount,
-                'status'            => $transactionObject->getStatus(),
                 'due_on'            => $transactionObject->due_on,
                 'vat'               => $transactionObject->vat,
                 'vat_included'      => $transactionObject->vat_included,
@@ -71,16 +95,12 @@ class TransactionService
     {
         $remainingAmount = $transaction->remaining_amount - $paymentRecord->amount;
 
-        $status = $transaction->status;
-        if($paymentRecord->paid_on >= $transaction->due_on)
-            $status = 'overdue';
-        elseif ($paymentRecord->paid_on < $transaction->due_on && $remainingAmount == 0)
-            $status = 'paid';
-
-        $transaction->update(['remaining_amount' => $remainingAmount, 'status' => $status]);
+        $transaction->update(['remaining_amount' => $remainingAmount]);
     }
 
     public function getMonthlyTransactions($startDate, $endDate) {
+        $todayDate = date('Y-m-d');
+
         return Transaction::query()
             ->where('due_on', '>=', $startDate)
             ->where('due_on', '<=', $endDate)
@@ -88,9 +108,9 @@ class TransactionService
             ->select( array(
                 DB::raw('Month(due_on) AS month'),
                 DB::raw('Year(due_on) AS year'),
-                DB::raw("SUM(IF(status = 'paid', amount, 0)) as paid"),
-                DB::raw("SUM(IF(status = 'outstanding', remaining_amount, 0)) as outstanding"),
-                DB::raw("SUM(IF(status = 'overdue', (amount - remaining_amount), 0)) as overdue"),
+                DB::raw("SUM(IF(remaining_amount = 0, amount, 0)) as paid"),
+                DB::raw("SUM(IF(due_on > '".$todayDate."', remaining_amount, 0)) as outstanding"),
+                DB::raw("SUM(IF(due_on <= '". $todayDate ."', remaining_amount, 0)) as overdue"),
             ))
             ->get();
     }

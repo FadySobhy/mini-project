@@ -4,7 +4,6 @@ namespace App\Providers;
 
 use App\Services\Api\V1\AdminService;
 use App\Services\Api\V1\AuthTypeServicesRegistry;
-use App\Services\Api\V1\SupplierService;
 use App\Services\Api\V1\UserService;
 use Illuminate\Support\ServiceProvider;
 

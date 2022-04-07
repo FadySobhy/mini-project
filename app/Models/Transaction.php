@@ -15,7 +15,6 @@ class Transaction extends Model
         'due_on',
         'vat',
         'vat_included',
-        'status',
         'payer',
         'category_id',
         'subcategory_id'
