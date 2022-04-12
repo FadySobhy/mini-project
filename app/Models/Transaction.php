@@ -11,7 +11,6 @@ class Transaction extends Model
 
     protected $fillable = [
         'amount',
-        'remaining_amount',
         'due_on',
         'vat',
         'vat_included',

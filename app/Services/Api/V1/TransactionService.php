@@ -26,6 +26,7 @@ class TransactionService
     public function getAll()
     {
         $transactions = Transaction::with(['payer:id,name', 'category:id,name', 'subcategory:id,name'])
+            ->withSum('paymentRecords', 'amount')
             ->paginate(10);
         $this->setStatusToTransactions($transactions);
 
@@ -35,7 +36,8 @@ class TransactionService
     public function myTransactions()
     {
         $transactions = Transaction::where('payer', auth()->user()->id)
-            ->with(['paymentRecords', 'category:id,name', 'subcategory:id,name'])
+            ->with(['category:id,name', 'subcategory:id,name'])
+            ->withSum('paymentRecords', 'amount')
             ->paginate(10);
         $this->setStatusToTransactions($transactions);
 
@@ -46,12 +48,13 @@ class TransactionService
         $transaction->transform(function ($item, $key) {
             $status     = '';
             $todayDate  = date('Y-m-d');
+            $remainingAmount = $item->amount - $item->payment_records_sum_amount;
 
-            if ($item->remaining_amount == 0)
+            if ($remainingAmount == 0)
                 $status = 'paid';
-            elseif ($item->due_on > $todayDate  && $item->remaining_amount > 0)
+            elseif ($item->due_on > $todayDate  && $remainingAmount > 0)
                 $status = 'outstanding';
-            elseif ($item->due_on <= $todayDate && $item->remaining_amount > 0)
+            elseif ($item->due_on <= $todayDate && $remainingAmount > 0)
                 $status = 'overdue';
 
             $item->status = $status;
@@ -68,7 +71,6 @@ class TransactionService
             $totalAmount = $transactionObject->getTotalAmount();
             $transaction = Transaction::create([
                 'amount'            => $totalAmount,
-                'remaining_amount'  => $totalAmount,
                 'due_on'            => $transactionObject->due_on,
                 'vat'               => $transactionObject->vat,
                 'vat_included'      => $transactionObject->vat_included,
@@ -79,7 +81,7 @@ class TransactionService
 
             if (isset($request->payment) && !empty($request->payment)){
                 $paymentRequest = new Request($request->get('payment')[0]);
-                $this->paymentRecordService->create($paymentRequest, $transaction);
+                $paymentRecord = $this->paymentRecordService->create($paymentRequest, $transaction);
             }
 
             DB::commit();
@@ -91,15 +93,9 @@ class TransactionService
 
     }
 
-    public static function updateTransaction(Transaction $transaction, PaymentRecord $paymentRecord)
-    {
-        $remainingAmount = $transaction->remaining_amount - $paymentRecord->amount;
-
-        $transaction->update(['remaining_amount' => $remainingAmount]);
-    }
-
     public function getMonthlyTransactions($startDate, $endDate) {
         $todayDate = date('Y-m-d');
+        $totalPaymentAmountSubQuery = '(SELECT SUM(payment_records.amount) FROM payment_records WHERE payment_records.transaction_id = transactions.id GROUP BY payment_records.transaction_id)';
 
         return Transaction::query()
             ->where('due_on', '>=', $startDate)
@@ -108,9 +104,9 @@ class TransactionService
             ->select( array(
                 DB::raw('Month(due_on) AS month'),
                 DB::raw('Year(due_on) AS year'),
-                DB::raw("SUM(IF(remaining_amount = 0, amount, 0)) as paid"),
-                DB::raw("SUM(IF(due_on > '".$todayDate."', remaining_amount, 0)) as outstanding"),
-                DB::raw("SUM(IF(due_on <= '". $todayDate ."', remaining_amount, 0)) as overdue"),
+                DB::raw("SUM(IF(transactions.amount = ".$totalPaymentAmountSubQuery.", transactions.amount, 0)) as paid"),
+                DB::raw("SUM(IF(due_on > '".$todayDate."', transactions.amount - ".$totalPaymentAmountSubQuery.", 0)) as outstanding"),
+                DB::raw("SUM(IF(due_on <= '". $todayDate ."', transactions.amount - ".$totalPaymentAmountSubQuery.", 0)) as overdue"),
             ))
             ->get();
     }

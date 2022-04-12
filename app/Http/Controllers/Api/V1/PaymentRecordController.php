@@ -29,8 +29,8 @@ class PaymentRecordController extends Controller
     public function create(PaymentRecordRequest $paymentRecordRequest)
     {
         $transaction    = $this->transactionService->findById($paymentRecordRequest->transaction_id);
-        $paymentRecordResponse  = $this->paymentRecordService->create($paymentRecordRequest, $transaction);
+        $paymentRecord  = $this->paymentRecordService->create($paymentRecordRequest, $transaction);
 
-        return $paymentRecordResponse;
+        return response()->success($paymentRecord);
     }
 }
