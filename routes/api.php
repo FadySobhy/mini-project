@@ -1,13 +1,14 @@
 <?php
 
-use App\Http\Controllers\Api\V1\Auth\AuthController;
-use App\Http\Controllers\Api\V1\CategoryController;
-use App\Http\Controllers\Api\V1\PaymentRecordController;
-use App\Http\Controllers\Api\V1\ReportController;
-use App\Http\Controllers\Api\V1\SubCategoryController;
-use App\Http\Controllers\Api\V1\TransactionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\HomeController;
+use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\SubCategoryController;
+use App\Http\Controllers\Api\V1\TransactionController;
+use App\Http\Controllers\Api\V1\PaymentRecordController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +22,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::group(['namespace' => 'Api\V1', 'prefix' => 'v1'], function() {
+
+    Route::get('/users', [HomeController::class, 'index']);
+    Route::get('/users-fractal', [HomeController::class, 'fractalAPiResource']);
 
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
